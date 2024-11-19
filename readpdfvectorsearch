@@ -1,0 +1,100 @@
+#Import Libraries
+
+#To parse/read PDF
+import pdfplumber
+import openai
+from openai import OpenAI
+#Pinecone Vector DB
+from pinecone import ServerlessSpec
+from pinecone import Pinecone as PineconeClient
+#To read Environment Variable
+from dotenv import load_dotenv
+load_dotenv()
+
+#To load Os Parameters
+import os
+from langchain.vectorstores import Pinecone
+import pinecone
+#Read OPEN API Key
+client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
+
+# Initialize APIs
+#openai.api_key = ""
+#pinecone.init(api_key="", environment="us-east-1")
+
+#Load Pine Coen DB using API Key
+pc = PineconeClient(api_key=os.environ.get("PINECONE_API_KEY"))
+#pc.list_indexes().names()
+
+# Pinecone DB Specs
+spec = ServerlessSpec(cloud="AWS", region="us-east-1")
+#Index Name in Pinecone
+index_name = "langchainvector"
+
+#index = pc.Index(index_name)
+#index.describe_index_stats()
+
+# Use to create Index
+#if index_name not in pc.list_indexes():
+#    pc.create_index(dimension=1536,
+#        name = "langchainvector",
+#        metric="cosine",
+#        spec=ServerlessSpec(
+#        cloud="aws",
+#        region="us-east-1"
+#  ),
+#  deletion_protection="disabled")
+
+index = pc.Index(index_name)
+
+# Step 1: Extract text from PDF
+def extract_text_from_pdf(pdf_path):
+    with pdfplumber.open(pdf_path) as pdf:
+        return "".join(page.extract_text() for page in pdf.pages)
+
+# Step 2: Chunk text
+def chunk_text(text, max_chars=1000):
+    chunks = []
+    while len(text) > max_chars:
+        split_idx = text[:max_chars].rfind('. ')
+        chunks.append(text[:split_idx + 1])
+        text = text[split_idx + 1:]
+    chunks.append(text.strip())
+    return chunks
+
+# Step 3: Generate embeddings and store in Pinecone
+def store_embeddings(chunks):
+    for i, chunk in enumerate(chunks):
+        embedding = client.embeddings.create(model="text-embedding-ada-002", input=chunk).data[0].embedding#["data"][0]["embedding"]
+        #Write data to Pinecone Index
+        index.upsert([(f"chunk-{i}", embedding, {"text": chunk})])
+
+# Step 4: Query relevant chunks
+def query_relevant_chunks(query, top_k=5):
+    query_embedding = client.embeddings.create(model="text-embedding-ada-002", input=query).data[0].embedding#["data"][0]["embedding"]
+    results = index.query(vector=query_embedding, top_k=top_k, include_metadata=True)
+    return [match["metadata"]["text"] for match in results["matches"]]
+
+# Step 5: Analyze chunks with GPT-3.5-turbo
+def analyze_chunks(chunks):
+    response = client.chat.completions.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            {"role": "user", "content": f"Analyze and summarize this:\n\n{chunks}"}
+        ],
+        temperature=0.7,
+        max_tokens=500
+    )
+    return response.choices[0].message.content
+
+# Integrate together: all the defs/methods
+pdf_text = extract_text_from_pdf("documents/Deepak_Kumar_Covering_Letter.pdf")
+chunks = chunk_text(pdf_text)
+store_embeddings(chunks)
+
+query = "Summarize the document's discussion about Deepak Kumar"
+relevant_chunks = query_relevant_chunks(query)
+summary = analyze_chunks("\n\n".join(relevant_chunks))
+
+print("Summary:\n", summary)
