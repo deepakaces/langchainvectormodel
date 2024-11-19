@@ -22,7 +22,7 @@ client = OpenAI(api_key=os.environ['OPENAI_API_KEY'])
 #openai.api_key = ""
 #pinecone.init(api_key="", environment="us-east-1")
 
-#Load Pine Coen DB using API Key
+#Load Pine Cone DB using API Key
 pc = PineconeClient(api_key=os.environ.get("PINECONE_API_KEY"))
 #pc.list_indexes().names()
 
@@ -36,12 +36,12 @@ index_name = "langchainvector"
 
 # Use to create Index
 #if index_name not in pc.list_indexes():
-#    pc.create_index(dimension=1536,
-#        name = "langchainvector",
+#    pc.create_index(dimension=,
+#        name = "",
 #        metric="cosine",
 #        spec=ServerlessSpec(
 #        cloud="aws",
-#        region="us-east-1"
+#        region="us-west-1"
 #  ),
 #  deletion_protection="disabled")
 
@@ -89,11 +89,11 @@ def analyze_chunks(chunks):
     return response.choices[0].message.content
 
 # Integrate together: all the defs/methods
-pdf_text = extract_text_from_pdf("documents/Deepak_Kumar_Covering_Letter.pdf")
+pdf_text = extract_text_from_pdf("documents/Dummy.pdf")
 chunks = chunk_text(pdf_text)
 store_embeddings(chunks)
 
-query = "Summarize the document's discussion about Deepak Kumar"
+query = "Summarize the document's discussion about something"
 relevant_chunks = query_relevant_chunks(query)
 summary = analyze_chunks("\n\n".join(relevant_chunks))
 
