@@ -1,0 +1,72 @@
+# import Libraries
+
+import openai
+import langchain
+import pinecone
+from langchain.document_loaders import PyPDFDirectoryLoader
+from langchain.text_splitter import RecursiveCharacterTextSplitter
+from langchain.embeddings import OpenAIEmbeddings
+
+from langchain.llms import OpenAI
+from dotenv import load_dotenv
+load_dotenv()
+
+import os
+
+from pinecone import ServerlessSpec
+from pinecone import Pinecone as PineconeClient
+from langchain.vectorstores import Pinecone
+
+from langchain.chains.question_answering import load_qa_chain
+from langchain import OpenAI
+
+# Read the Document
+def read_docs(directory):
+    file_loader=PyPDFDirectoryLoader(directory)
+    documents=file_loader.load()
+    return documents
+
+doc = read_docs('documents/')
+len(doc)
+
+# Divide the Document into chunks
+
+def chunk_data(docs, chunk_size=2000,chunk_overlap=500):
+    text_splitter=RecursiveCharacterTextSplitter(chunk_size=chunk_size, chunk_overlap=chunk_overlap)
+    doc=text_splitter.split_documents(docs)
+    return docs
+
+documents=chunk_data(docs=doc)
+len(documents)
+
+embeddings=OpenAIEmbeddings(api_key=os.environ['OPENAI_API_KEY']) 
+embeddings
+
+vectors=embeddings.embed_query("Tehnology Consultant")
+len(vectors)
+
+pc = PineconeClient(api_key=os.environ.get("PINECONE_API_KEY"))
+#pc.list_indexes().names()
+spec = ServerlessSpec(cloud="AWS", region="us-east-1")
+index_name='langchainvector'
+
+index=Pinecone.from_documents(doc, embeddings, index_name=index_name)
+index
+
+# Cosine Similarity Search to retrieve the Data from Vector DB
+def retrieve_query(query, k=2):
+    matching_results=index.similarity_search(query, k=k)
+    return matching_results
+
+
+client = OpenAI()
+
+response = openai.chat.completions.create(
+    model='gpt-3.5-turbo',
+    messages=[
+        {"role": "system", "content": "You are a helpful assistant."},
+        {"role": "user", "content": "Help me read the pdf doc \n {matching_results}"}
+    ],
+    temperature=0.7,
+    max_tokens=150)
+print(response.choices[0].message.content.strip()) #response['choices'][0]['message']['content']
